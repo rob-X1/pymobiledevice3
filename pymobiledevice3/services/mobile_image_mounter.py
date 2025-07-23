@@ -1,5 +1,7 @@
 import hashlib
+import os
 import plistlib
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -346,8 +348,16 @@ async def auto_mount_personalized(lockdown: LockdownServiceProvider) -> None:
     build_manifest = local_path / 'BuildManifest.plist'
     trustcache = local_path / 'Image.trustcache'
 
-    if (not build_manifest.exists() or
-            plistlib.loads(build_manifest.read_bytes()).get('ProductBuildVersion') != LATEST_DDI_BUILD_ID):
+    cache_files_exist = all(x.exists() for x in [image, build_manifest, trustcache])
+    download_image = True
+
+    if cache_files_exist:
+        modification_time = os.path.getmtime(trustcache)
+        age_hours = (time.time() - modification_time) / 3600
+        expected_pbv = plistlib.loads(build_manifest.read_bytes()).get('ProductBuildVersion') == LATEST_DDI_BUILD_ID
+        if age_hours < 6 or expected_pbv:
+            download_image = False
+    if download_image:
         # download the Personalized image from our repository
         repo = DeveloperDiskImageRepository.create()
         personalized_image = repo.get_personalized_disk_image()
